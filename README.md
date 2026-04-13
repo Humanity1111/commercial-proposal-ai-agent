@@ -1,6 +1,8 @@
 # CP Processor — AI агент подбора поставщиков по закупке
 
-Сервис для обработки коммерческих предложений (КП). Загружаешь файл — получаешь структурированные данные о товарах, ценах и поставщиках. Внутри Gemma 4 через Ollama, Spring Boot, PostgreSQL.
+Сервис для обработки коммерческих предложений (КП) и связанных документов. Загружаешь файл — получаешь структурированные данные о товарах, артикулах, количестве, единицах измерения, ценах и поставщиках.
+Для известных структурированных Excel-форматов используется детерминированный парсинг без LLM, для остальных документов — обработка через Ollama + Spring AI.
+
 
 ---
 
@@ -50,9 +52,9 @@ graph TD
     Controllers --> AuthService
     Controllers --> TaskService
     TaskService -->|@Async| TaskProcessingService
-    TaskProcessingService --> ExtractionService[ExtractionService - Spring AI]
+    TaskProcessingService --> ExtractionService[ExtractionService]
     ExtractionService --> FileParserService[FileParserService - POI / PDFBox]
-    ExtractionService -->|REST| Ollama[Ollama - Gemma 4]
+    ExtractionService -->|LLM branch| Ollama[Ollama - Gemma 4]
     TaskService --> Repository[Spring Data JPA]
     TaskProcessingService --> Repository
     AuthService --> Repository
@@ -63,9 +65,11 @@ graph TD
 - Клиент аутентифицируется через `/auth/login`, получает JWT
 - Загружает файл через `POST /cp/tasks` — создаётся задача в статусе `PENDING`
 - Обработка идёт асинхронно: `TaskProcessingService` (отдельный бин для корректной работы `@Async` через Spring AOP) передаёт содержимое в `ExtractionService`
-- `FileParserService` парсит файл в текст (xlsx через Apache POI, pdf через PDFBox, zip — рекурсивная распаковка)
-- `ExtractionService` через Spring AI отправляет промпт в Ollama (Gemma 4) с JSON Schema для структурированного ответа
-- `BeanOutputConverter` автоматически парсит ответ AI в Java record `ExtractionResult`
+- `ExtractionService` выбирает стратегию обработки:
+  - для известных структурированных Excel-форматов используется детерминированный парсер без LLM
+  - для неструктурированных и полуструктурированных документов `FileParserService` извлекает текст, после чего `ExtractionService` через Spring AI отправляет промпт в Ollama
+- Для LLM-ветки `BeanOutputConverter` автоматически парсит ответ AI в Java record `ExtractionResult`
+- Результат сохраняется в БД
 - Клиент проверяет статус через `GET /cp/tasks/{id}`
 
 ---
@@ -132,12 +136,23 @@ curl http://localhost:8080/cp/tasks/<TASK_ID> \
 
 | Формат | Библиотека | Что извлекается |
 |---|---|---|
-| `.xlsx` / `.xls` | Apache POI | Все листы, все строки и ячейки |
+| `.xlsx` / `.xls` | Apache POI | Все листы, строки и ячейки; для известных structured Excel-форматов возможен direct parsing без LLM |
 | `.docx` | Apache POI (XWPF) | Параграфы + таблицы |
-| `.pdf` | Apache PDFBox | Весь текст |
-| `.csv` / `.txt` | — | Как есть (UTF-8) |
+| `.pdf` | Apache PDFBox | Весь текстовый слой |
+| `.csv` | — | Как есть (UTF-8) |
 | `.zip` | Commons Compress | Рекурсивная распаковка, парсинг каждого файла внутри |
-| `.rar` / `.7z` | — | Пока не поддерживаются (возвращает пустой результат) |
+| `.rar` / `.7z` | — | Принимаются, но содержимое полноценно не извлекается / возвращается пустой результат |
+| `.txt` | — | Поддерживается парсером, но зависит от серверной валидации расширений |
+
+---
+
+## Проверенные сценарии
+
+Во время ручной проверки были успешно протестированы следующие кейсы:
+
+- `cp_processing_tasks(backend).xlsx` — structured Excel, обрабатывается без LLM, статус `COMPLETED`
+- `asd.docx` — DOCX, обрабатывается через LLM, статус `COMPLETED`
+- `test_kp_office.xlsx` — Excel коммерческого предложения, обрабатывается через LLM, статус `COMPLETED`
 
 ---
 
@@ -146,7 +161,7 @@ curl http://localhost:8080/cp/tasks/<TASK_ID> \
 - **Бесплатно** — не нужны API-ключи, нет оплаты за токены
 - **Приватность** — данные КП не уходят на внешние серверы
 - **Автономность** — работает оффлайн после скачивания модели
-- **Gemma 4 E2B** (~7.2 ГБ) — лёгкая модель, хватает для structured extraction из КП
+- **Gemma 4 E2B** (~7.2 ГБ) — достаточно лёгкая локальная модель, подходит для извлечения данных из неструктурированных и полуструктурированных документов
 
 Для продакшена с большими объёмами можно переключить на:
 - `gemma4:e4b` (~9.6 ГБ) — лучше качество, больше памяти
