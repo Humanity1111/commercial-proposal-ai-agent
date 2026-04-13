@@ -47,18 +47,18 @@ docker compose down -v   # остановить + удалить данные
 
 ```mermaid
 graph TD
-    Client[Client - curl / Postman / UI] -->|HTTP| Security[Security Filter - JWT]
-    Security --> Controllers
-    Controllers --> AuthService
-    Controllers --> TaskService
-    TaskService -->|@Async| TaskProcessingService
+    Client[Client] --> Security[JWT Filter]
+    Security --> Controllers[Controllers]
+    Controllers --> AuthService[AuthService]
+    Controllers --> TaskService[TaskService]
+    TaskService --> TaskProcessingService[TaskProcessingService]
     TaskProcessingService --> ExtractionService[ExtractionService]
-    ExtractionService --> FileParserService[FileParserService - POI / PDFBox]
-    ExtractionService -->|LLM branch| Ollama[Ollama - Gemma 4]
-    TaskService --> Repository[Spring Data JPA]
+    ExtractionService --> FileParserService[FileParserService]
+    ExtractionService --> Ollama[Ollama]
+    TaskService --> Repository[Repository]
     TaskProcessingService --> Repository
     AuthService --> Repository
-    Repository -->|JDBC| DB[(PostgreSQL 16)]
+    Repository --> DB[(PostgreSQL)]
 ```
 
 **Как это работает:**
