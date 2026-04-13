@@ -1,0 +1,48 @@
+server:
+  port: 8080
+
+spring:
+  datasource:
+    url: ${SPRING_DATASOURCE_URL:jdbc:postgresql://localhost:5432/cpprocessor}
+    username: ${SPRING_DATASOURCE_USERNAME:cpuser}
+    password: ${SPRING_DATASOURCE_PASSWORD:cppassword}
+    hikari:
+      maximum-pool-size: 10
+      minimum-idle: 2
+
+  jpa:
+    hibernate:
+      ddl-auto: none
+    show-sql: false
+    open-in-view: false
+    properties:
+      hibernate:
+        dialect: org.hibernate.dialect.PostgreSQLDialect
+
+  liquibase:
+    change-log: classpath:db/changelog/db.changelog-master.yaml
+
+  servlet:
+    multipart:
+      max-file-size: 50MB
+      max-request-size: 50MB
+
+  ai:
+    ollama:
+      base-url: ${OLLAMA_BASE_URL:http://localhost:11434}
+      init:
+        pull-model-strategy: never
+      chat:
+        options:
+          # gemma4:e2b  — Effective 2B, ~7.2 GB  (лёгкая, для edge/dev)
+          # gemma4:e4b  — Effective 4B, ~9.6 GB  (баланс качество/размер)
+          # gemma4:26b  — MoE 26B,     ~18 GB   (frontier, нужно ≥24 GB VRAM)
+          # gemma4:31b  — Dense 31B,   ~20 GB   (максимум, нужно ≥24 GB VRAM)
+          model: ${OLLAMA_MODEL:gemma4:e2b}
+          temperature: 0.0
+          seed: 42
+
+app:
+  jwt:
+    secret: ${JWT_SECRET:myDefaultSecretKeyWhichIsAtLeast256BitsLongForHS256AlgorithmSecurity}
+    expiration-ms: 86400000

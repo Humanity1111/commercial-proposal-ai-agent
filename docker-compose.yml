@@ -1,0 +1,72 @@
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: cpprocessor
+      POSTGRES_USER: cpuser
+      POSTGRES_PASSWORD: cppassword
+    ports:
+      - "5435:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U cpuser -d cpprocessor"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  ollama:
+    image: ollama/ollama:latest
+    ports:
+      - "11434:11434"
+    volumes:
+      - ollama_data:/root/.ollama
+    environment:
+      OLLAMA_KEEP_ALIVE: "-1"
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - count: all
+              capabilities: [ gpu ]
+    healthcheck:
+      test: [ "CMD", "ollama", "list" ]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
+
+
+
+  ollama-pull:
+    image: ollama/ollama:latest
+    depends_on:
+      ollama:
+        condition: service_healthy
+    entrypoint: ["sh", "-c", "ollama pull gemma4:e2b"]
+    environment:
+      OLLAMA_HOST: http://ollama:11434
+
+  app:
+    build: .
+    ports:
+      - "8080:8080"
+    depends_on:
+      db:
+        condition: service_healthy
+      ollama:
+        condition: service_healthy
+      ollama-pull:
+        condition: service_completed_successfully
+    environment:
+      SPRING_DATASOURCE_URL: jdbc:postgresql://db:5432/cpprocessor
+      SPRING_DATASOURCE_USERNAME: cpuser
+      SPRING_DATASOURCE_PASSWORD: cppassword
+      JWT_SECRET: productionSecretKeyThatIsLongEnoughForHS256AlgorithmMinimum256Bits
+      OLLAMA_BASE_URL: http://ollama:11434
+    restart: on-failure
+
+volumes:
+  postgres_data:
+  ollama_data:

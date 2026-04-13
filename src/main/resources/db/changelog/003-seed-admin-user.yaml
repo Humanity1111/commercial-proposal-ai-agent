@@ -1,0 +1,23 @@
+databaseChangeLog:
+  - changeSet:
+      id: 003-seed-admin-user
+      author: cpprocessor
+      changes:
+        - insert:
+            tableName: users
+            columns:
+              - column:
+                  name: id
+                  valueComputed: gen_random_uuid()
+              - column:
+                  name: username
+                  value: admin
+              - column:
+                  name: password
+                  value: "$2a$10$Eh5YBxQAuazTzQswk7wwzu3Kqf5OGzLNzSTskpQypWA6eUuL/i52O"
+              - column:
+                  name: role
+                  value: ROLE_ADMIN
+              - column:
+                  name: created_at
+                  valueComputed: now()
